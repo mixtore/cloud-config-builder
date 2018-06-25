@@ -20,6 +20,12 @@ type (
 	AppEngine struct {
 		EnvVars EnvVars
 
+		BetaSettingsField AppEngineBetaSettingsField
+		BetaSettings      bool
+
+		RuntimeConfigField AppEngineRuntimeConfigField
+		RuntimeConfig      bool
+
 		ScalingField AppEngineScalingField
 		Scaling      bool
 
@@ -32,6 +38,14 @@ type (
 		Runtime string
 		Env     string
 		Command string
+	}
+
+	AppEngineBetaSettingsField struct {
+		CloudSQLInstances string
+	}
+
+	AppEngineRuntimeConfigField struct {
+		DocumentRoot string
 	}
 
 	AppEngineScalingField struct {
@@ -70,6 +84,16 @@ health_check:
   enable_health_check: false
 {{- end }}
 
+{{ if .RuntimeConfig -}}
+runtime_config:
+  document_root: {{ .RuntimeConfigField.DocumentRoot }}
+{{- end }}
+
+{{ if .BetaSettings -}}
+beta_settings:
+  cloud_sql_instances: {{ .BetaSettingsField.CloudSQLInstances }}
+{{- end }}
+
 {{ if .Scaling -}}
 automatic_scaling:
   min_num_instances: {{ .ScalingField.MinNumInstances }}
@@ -99,12 +123,18 @@ func main() {
 	flagSettingsCommandPtr := flag.String("command", "", "set command")
 	flagSettingsDisableHealthCheckPtr := flag.Bool("disable-healthcheck", false, "disable healthcheck")
 
-	flagSettingsScalingPtr := flag.Bool("scaling", true, "enable automatic scaling")
+	flagSettingsRuntimeConfigPtr := flag.Bool("runtime-config", false, "enable beta features")
+	flagSettingsRuntimeConfigDocumentRootPtr := flag.String("runtime-config-document-root", "", "set cloud-sql-instances")
+
+	flagSettingsBetaSettingsPtr := flag.Bool("beta-settings", false, "enable beta features")
+	flagSettingsBetaSettingsCloudSQLPtr := flag.String("beta-settings-cloud-sql", "", "set cloud-sql-instances")
+
+	flagSettingsScalingPtr := flag.Bool("scaling", false, "enable automatic scaling")
 	flagSettingsScalingMinPtr := flag.String("scaling-min", "", "set scaling min num instances")
 	flagSettingsScalingMaxPtr := flag.String("scaling-max", "", "set scaling max num instances")
 	flagSettingsScalingCPUPtr := flag.String("scaling-cpu", "", "set scaling cpu utilization target")
 
-	flagSettingsResourcesPtr := flag.Bool("resources", true, "enable resources requisition")
+	flagSettingsResourcesPtr := flag.Bool("resources", false, "enable resources requisition")
 	flagSettingsResourcesMemoryPtr := flag.String("resources-memory", "", "set resource memory ( in GB )")
 	flagSettingsResourcesCPUPtr := flag.String("resources-cpu-count", "", "set resource cpu count")
 
@@ -131,6 +161,14 @@ func main() {
 			Env:                *flagSettingsEnvPtr,
 			Command:            *flagSettingsCommandPtr,
 			DisableHealthCheck: *flagSettingsDisableHealthCheckPtr,
+			RuntimeConfigField: AppEngineRuntimeConfigField{
+				DocumentRoot: *flagSettingsRuntimeConfigDocumentRootPtr,
+			},
+			RuntimeConfig: *flagSettingsRuntimeConfigPtr,
+			BetaSettingsField: AppEngineBetaSettingsField{
+				CloudSQLInstances: *flagSettingsBetaSettingsCloudSQLPtr,
+			},
+			BetaSettings: *flagSettingsBetaSettingsPtr,
 			ScalingField: AppEngineScalingField{
 				MinNumInstances: *flagSettingsScalingMinPtr,
 				MaxNumInstances: *flagSettingsScalingMaxPtr,
@@ -202,7 +240,22 @@ func (a *AppEngine) Validate() {
 		log.Fatal("missing -env flag")
 	}
 	if len(a.Command) == 0 {
-		log.Fatal("missing -command flag")
+		switch a.Runtime {
+		case "ruby":
+			log.Fatal("missing -command flag")
+		}
+	}
+
+	if a.RuntimeConfig {
+		if len(a.RuntimeConfigField.DocumentRoot) == 0 {
+			log.Fatal("missing -runtime-config-document-root flag")
+		}
+	}
+
+	if a.BetaSettings {
+		if len(a.BetaSettingsField.CloudSQLInstances) == 0 {
+			log.Fatal("missing -beta-settings-cloud-sql-instances flag")
+		}
 	}
 
 	if a.Scaling {
